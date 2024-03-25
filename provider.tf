@@ -12,13 +12,12 @@ terraform {
       source  = "hashicorp/helm"
       version = "2.9.0"
     }
+    kubectl = {
+      source  = "gavinbunney/kubectl"
+      version = ">= 1.7.0"
+    }
   }
-  backend "s3" {
-    bucket  = "rias-touch-terraform-state-file"
-    key     = "terraform-eks/dev-terraform.tfstate"
-    region  = eu-central-1
-    encrypt = true
-  }
+  backend "s3" {}
 }
 
 provider "aws" {
@@ -45,7 +44,20 @@ provider "helm" {
       api_version = "client.authentication.k8s.io/v1beta1"
       command     = "aws"
       # This requires the awscli to be installed locally where Terraform is executed
-      args = ["eks", "get-token", "--cluster-name", module.eks_cluster.eks_cluster_id]
+      args = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
     }
+  }
+}
+
+provider "kubectl" {
+  apply_retry_count      = 5
+  host                   = module.eks_cluster.eks_cluster_endpoint
+  cluster_ca_certificate = base64decode(module.eks_cluster.eks_cluster_certificate_authority_data)
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    # This requires the awscli to be installed locally where Terraform is executed
+    args = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
   }
 }

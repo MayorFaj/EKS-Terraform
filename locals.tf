@@ -1,6 +1,6 @@
 locals {
   name            = "rias-touch-ecommerce"
-  cluster_version = "1.27"
+  cluster_version = "1.29"
   region          = "eu-central-1"
 
   vpc_cidr = "10.0.0.0/16"
@@ -47,10 +47,10 @@ locals {
   ebs_csi_service_account_name      = "ebs-csi-controller-sa"
 
   tags = {
-    Environment = "dev"
+    Environment                                   = "dev"
     "kubernetes.io/cluster/${local.name}-cluster" = "shared"
-    GithubRepo  = "terraform-aws-eks"
-    GithubOrg   = "terraform-aws-modules"
+    GithubRepo                                    = "terraform-aws-eks"
+    GithubOrg                                     = "terraform-aws-modules"
   }
 }
 

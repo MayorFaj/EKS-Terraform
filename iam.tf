@@ -11,7 +11,8 @@ module "allow_eks_access_iam_policy" {
     Statement = [
       {
         Action = [
-          "eks:DescribeCluster",
+          "ec2:Describe*",
+          "eks:Describe*",
         ]
         Effect   = "Allow"
         Resource = "*"

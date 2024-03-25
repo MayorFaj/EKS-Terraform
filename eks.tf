@@ -11,11 +11,16 @@ module "eks" {
   vpc_id = module.vpc.vpc_id
 
   subnet_ids               = module.vpc.private_subnets
-  control_plane_subnet_ids = module.vpc.intra_subnets
+  control_plane_subnet_ids = module.vpc.private_subnets
+  create_kms_key           = false
+  cluster_encryption_config = {
+    resources        = ["secrets"]
+    provider_key_arn = module.ebs_kms_key.key_arn
+  }
 
-  cluster_ip_family = "ipv6"
+  #cluster_ip_family = "ipv6"
 
-  create_cni_ipv6_iam_policy = true
+  #create_cni_ipv6_iam_policy = true
 
   manage_aws_auth_configmap = true
 
@@ -23,7 +28,14 @@ module "eks" {
 
   aws_auth_accounts = local.aws_auth_accounts
 
-  enable_irsa = true
+  #enable_irsa = true
+
+  iam_role_additional_policies = {
+    additional                      = aws_iam_policy.additional.arn
+    EKSNodegroupClusterIssuerPolicy = aws_iam_policy.eks_nodegroup_cluster_issuer_policy.arn
+    EKSNodegroupExternalDNSPolicy   = aws_iam_policy.eks_nodegroup_exteral_dns_policy.arn
+    EKSNodegroupECRFullAccess       = aws_iam_policy.eks_nodegroup_ecr_full_access.arn
+  }
 
   cluster_addons = {
     coredns = {
@@ -40,18 +52,18 @@ module "eks" {
     }
 
     vpc-cni = {
-      most_recent              = true
-      before_compute           = true
-      service_account_role_arn = module.vpc_cni_irsa.iam_role_arn
-      configuration_values = jsonencode({
-        env = {
-          # Reference docs https://docs.aws.amazon.com/eks/latest/userguide/cni-increase-ip-addresses.html
-          ENABLE_PREFIX_DELEGATION = "true"
-          WARM_PREFIX_TARGET       = "1"
-        }
-      })
+      most_recent = true
     }
-
+    #before_compute           = true
+    #service_account_role_arn = module.vpc_cni_irsa.iam_role_arn
+    # configuration_values = jsonencode({
+    #   env = {
+    #     # Reference docs https://docs.aws.amazon.com/eks/latest/userguide/cni-increase-ip-addresses.html
+    #     ENABLE_PREFIX_DELEGATION = "true"
+    #     WARM_PREFIX_TARGET       = "1"
+    #   }
+    # })
+    #}
   }
 
   cluster_security_group_additional_rules = {
@@ -63,16 +75,25 @@ module "eks" {
       type                       = "ingress"
       source_node_security_group = true
     }
-    # Test: https://github.com/terraform-aws-modules/terraform-aws-eks/pull/2319
-    # ingress_source_security_group_id = {
-    #   description              = "Ingress from another computed security group"
-    #   protocol                 = "tcp"
-    #   from_port                = 22
-    #   to_port                  = 22
-    #   type                     = "ingress"
-    #   source_security_group_id = aws_security_group.additional.id
-    # }
+    ingress_cluster_tcp = {
+      description = "Allow Access to Security group from anywhere."
+      protocol    = "tcp"
+      from_port   = 443
+      to_port     = 443
+      type        = "ingress"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+    ingress_source_security_group_id = {
+      description              = "Ingress from another computed security group"
+      protocol                 = "tcp"
+      from_port                = 22
+      to_port                  = 22
+      type                     = "ingress"
+      source_security_group_id = aws_security_group.remote_access.id
+    }
   }
+
+
 
   node_security_group_additional_rules = {
     ingress_self_all = {
@@ -82,6 +103,15 @@ module "eks" {
       to_port     = 0
       type        = "ingress"
       self        = true
+    }
+
+    ingress_source_security_group_id = {
+      description              = "Ingress from another computed security group"
+      protocol                 = "tcp"
+      from_port                = 22
+      to_port                  = 22
+      type                     = "ingress"
+      source_security_group_id = aws_security_group.remote_access.id
     }
 
     egress_all = {
@@ -111,7 +141,12 @@ module "eks" {
       max_size             = 5
       force_update_version = true
 
-
+      iam_role_additional_policies = {
+        additional                      = aws_iam_policy.additional.arn
+        EKSNodegroupClusterIssuerPolicy = aws_iam_policy.eks_nodegroup_cluster_issuer_policy.arn
+        EKSNodegroupExternalDNSPolicy   = aws_iam_policy.eks_nodegroup_exteral_dns_policy.arn
+        EKSNodegroupECRFullAccess       = aws_iam_policy.eks_nodegroup_ecr_full_access.arn
+      }
 
       labels = {
         role       = "spot"
@@ -126,13 +161,13 @@ module "eks" {
         xvda = {
           device_name = "/dev/xvda"
           ebs = {
-            volume_size = 80
+            volume_size = 50
             volume_type = "gp3"
             #iops                  = 3000
             #throughput            = 150
             encrypted             = true
             kms_key_id            = module.ebs_kms_key.key_arn
-            delete_on_termination = false
+            delete_on_termination = true
           }
         }
       }
